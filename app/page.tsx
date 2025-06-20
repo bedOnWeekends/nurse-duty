@@ -12,7 +12,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { CalendarIcon, PlusCircle, Trash2, AlertCircle, Loader2 } from "lucide-react"
 import { addDays } from "date-fns"
 import { ko } from "date-fns/locale"
-import type { DateRange } from "react-day-picker"
+import type { DateRange } from "react-day-picker" // DayModifiers 추가
 import { cn, formatDate, formatDisplayDate, calculateOffDays, getPositionLabel } from "@/lib/utils"
 import { type Nurse, type ScheduleRequest, type ScheduleResponse, POSITION_OPTIONS } from "@/types"
 import ScheduleTable from "@/components/schedule-table"
@@ -35,11 +35,14 @@ export default function NurseSchedulePage() {
   const [isOffDaysPickerOpen, setIsOffDaysPickerOpen] = useState(false)
 
   const handleAddNurse = () => {
-    if (!nurseName || nursePosition === undefined || !dateRange?.from) return
+    if (!nurseName.trim() || nursePosition === undefined || !dateRange?.from) return
 
     const offDaysNumbers = calculateOffDays(preferredOffDays, dateRange.from)
 
-    setNurses([...nurses, { id: crypto.randomUUID(), name: nurseName, position: nursePosition, off: offDaysNumbers }])
+    setNurses([
+      ...nurses,
+      { id: crypto.randomUUID(), name: nurseName.trim(), position: nursePosition, off: offDaysNumbers },
+    ])
     setNurseName("")
     setNursePosition(undefined)
     setPreferredOffDays([])
@@ -56,7 +59,6 @@ export default function NurseSchedulePage() {
     }
     setIsLoading(true)
     setError(null)
-    // setScheduleResult(null) // Keep previous result visible during loading for smoother UX
 
     const requestBody: ScheduleRequest = {
       start: formatDate(dateRange.from),
@@ -75,10 +77,7 @@ export default function NurseSchedulePage() {
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({ message: "응답을 파싱할 수 없습니다." }))
-        let userMessage = errorData.message || `HTTP ${response.status} 오류가 발생했습니다.`
-        if (errorData.rawResponse) {
-          userMessage += `\n\n서버 응답: ${errorData.rawResponse}`
-        }
+        const userMessage = errorData.message || `HTTP ${response.status} 오류가 발생했습니다.`
         throw new Error(userMessage)
       }
 
@@ -86,24 +85,18 @@ export default function NurseSchedulePage() {
       setScheduleResult(data)
     } catch (e: any) {
       setError(e.message || "근무표 생성 중 오류가 발생했습니다.")
-      setScheduleResult(null) // Clear result on error
+      setScheduleResult(null)
     } finally {
       setIsLoading(false)
     }
   }
 
   const handleRedo = () => {
-    // Keep dateRange and nurses for quicker re-generation if desired by user
-    // setDateRange(undefined);
-    // setNurses([]);
     setScheduleResult(null)
     setError(null)
-    // setNurseName("");
-    // setNursePosition(undefined);
-    // setPreferredOffDays([]);
   }
 
-  const isAddNurseDisabled = !nurseName || nursePosition === undefined
+  const isAddNurseDisabled = !nurseName.trim() || nursePosition === undefined || !dateRange?.from
   const isDateRangeDisabled = nurses.length > 0
 
   const nurseNamesForTable = useMemo(() => {
@@ -125,6 +118,24 @@ export default function NurseSchedulePage() {
     hidden: { opacity: 0, y: 50 },
     visible: { opacity: 1, y: 0, transition: { duration: 0.5, ease: "easeInOut", delay: 0.2 } },
     exit: { opacity: 0, y: -50, transition: { duration: 0.3, ease: "easeInOut" } },
+  }
+
+  const handleDateRangeSelect = (
+    newRange: DateRange | undefined,
+    selectedDate: Date,
+    // activeModifiers: DayModifiers, // 이 파라미터는 현재 사용하지 않으므로 주석 처리하거나 제거 가능
+    // e: React.MouseEvent, // 이 파라미터는 현재 사용하지 않으므로 주석 처리하거나 제거 가능
+  ) => {
+    // 현재 dateRange 상태 (즉, 이 클릭 *이전*의 상태)를 기준으로 판단
+    if (dateRange?.from && dateRange?.to) {
+      // 이미 완전한 범위가 선택된 상태에서 사용자가 날짜를 클릭한 경우:
+      // 선택된 날짜(selectedDate)를 새로운 시작일로 하고 종료일은 초기화
+      setDateRange({ from: selectedDate, to: undefined })
+    } else {
+      // 완전한 범위가 아니었던 경우 (시작일만 있거나, 아무것도 없거나):
+      // react-day-picker가 제공하는 newRange를 그대로 사용
+      setDateRange(newRange)
+    }
   }
 
   return (
@@ -202,9 +213,7 @@ export default function NurseSchedulePage() {
                         mode="range"
                         defaultMonth={dateRange?.from}
                         selected={dateRange}
-                        onSelect={(range) => {
-                          setDateRange(range)
-                        }}
+                        onSelect={handleDateRangeSelect as any} // 타입스크립트 호환성을 위해 as any 사용, 실제로는 (DateRange | undefined, Date, DayModifiers, MouseEvent) 형태
                         numberOfMonths={2}
                         locale={ko}
                         className="bg-white rounded-lg"
@@ -238,8 +247,11 @@ export default function NurseSchedulePage() {
                         직책
                       </Label>
                       <Select
-                        value={nursePosition !== undefined ? String(nursePosition) : undefined}
-                        onValueChange={(value) => setNursePosition(Number(value))}
+                        value={nursePosition !== undefined ? String(nursePosition) : ""}
+                        onValueChange={(value) => {
+                          const numValue = Number(value)
+                          setNursePosition(numValue)
+                        }}
                       >
                         <SelectTrigger
                           id="nurse-position"
