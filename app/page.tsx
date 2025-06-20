@@ -204,9 +204,6 @@ export default function NurseSchedulePage() {
                         selected={dateRange}
                         onSelect={(range) => {
                           setDateRange(range)
-                          if (range?.from && range?.to) {
-                            setIsDateRangePickerOpen(false)
-                          }
                         }}
                         numberOfMonths={2}
                         locale={ko}
